@@ -1,0 +1,14 @@
+{
+	"pin": "123456",
+	"wakePhrase": "hey buddy",
+	"volume": { "default": 40, "max": 80, "step": 10 },
+	"folders": {},
+	"radio": {
+		"defaultStation": "groove-salad",
+		"stations": [
+			{ "id": "groove-salad", "name": "SomaFM Groove Salad", "url": "https://ice1.somafm.com/groovesalad-128-mp3" }
+		]
+	},
+	"lcd": { "enabled": true, "address": "0x27", "backlightTimeoutSec": 30, "darkHours": null },
+	"bluetooth": { "enabled": false }
+}

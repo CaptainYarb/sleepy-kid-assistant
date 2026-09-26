@@ -1,0 +1,43 @@
+{
+  "name": "sleepy-kid-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "DATA_DIR=dev-data MEDIA_DIR=dev-data/media tsx watch server/index.ts",
+    "dev:web": "vite",
+    "build": "vite build && tsc -p tsconfig.server.json",
+    "start": "node dist/server/index.js",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && vue-tsc -p tsconfig.web.json --noEmit",
+    "lint": "eslint . --fix",
+    "test": "vitest run",
+    "deploy": "./scripts/deploy.sh"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "hono": "^4.13.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.20.4",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "concurrently": "^10.0.5",
+    "eslint": "^10.11.0",
+    "eslint-plugin-vue": "^10.11.0",
+    "globals": "^17.0.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.70.1",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1",
+    "vue": "^3.5.43",
+    "vue-router": "^5.3.1",
+    "vue-tsc": "^3.3.11"
+  }
+}

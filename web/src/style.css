@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+	--font-lcd: "Courier New", ui-monospace, monospace;
+}
+
+@utility card {
+	@apply rounded-2xl bg-slate-900/80 p-4 ring-1 ring-white/5 sm:p-5;
+}
+
+@utility btn {
+	@apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-95 disabled:pointer-events-none disabled:opacity-40;
+}
+
+@utility btn-primary {
+	@apply btn bg-amber-300 text-slate-950 hover:bg-amber-200;
+}
+
+@utility btn-ghost {
+	@apply btn bg-white/5 text-slate-200 hover:bg-white/10;
+}
+
+@utility btn-danger {
+	@apply btn bg-rose-500/15 text-rose-300 hover:bg-rose-500/25;
+}
+
+@utility input {
+	@apply w-full rounded-xl border-0 bg-slate-800 px-3 py-2.5 text-slate-100 ring-1 ring-white/10 placeholder:text-slate-500 focus:ring-2 focus:ring-amber-300 focus:outline-none;
+}
+
+@utility label {
+	@apply mb-1.5 block text-xs font-medium tracking-wide text-slate-400 uppercase;
+}
+
+@utility chip {
+	@apply rounded-lg px-2.5 py-1.5 text-xs font-semibold transition;
+}

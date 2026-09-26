@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Builds on this machine and ships to the Pi so nothing is compiled on the Pi.
+# Usage: ./scripts/deploy.sh [user@host] [--setup]
+set -euo pipefail
+
+HOST="${SLEEPY_HOST:-pi@sleepy.local}"
+SETUP=false
+for arg in "$@"; do
+	case "$arg" in
+		--setup) SETUP=true ;;
+		*) HOST="$arg" ;;
+	esac
+done
+APP_DIR="sleepy"
+
+cd "$(dirname "$0")/.."
+npm run build
+
+ssh "$HOST" "mkdir -p $APP_DIR/py"
+# Named sources (no trailing slash) so --delete only prunes inside these folders, never data/ or the venv.
+rsync -az --delete dist assets scripts deploy package.json package-lock.json "$HOST:$APP_DIR/"
+rsync -az py/listen.py py/lcd.py py/requirements.txt "$HOST:$APP_DIR/py/"
+
+if [ "$SETUP" = true ]; then
+	ssh -t "$HOST" "cd $APP_DIR && ./scripts/setup-pi.sh"
+else
+	ssh "$HOST" "cd $APP_DIR && npm ci --omit=dev --no-audit --no-fund --loglevel=error && sudo systemctl restart sleepy"
+fi
+echo "Deployed to $HOST"

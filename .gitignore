@@ -1,0 +1,11 @@
+node_modules/
+dist/
+py/.venv/
+py/model/
+__pycache__/
+dev-data/*
+!dev-data/config.json
+!dev-data/schedules.json
+!dev-data/media/
+.DS_Store
+*.log
