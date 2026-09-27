@@ -1,18 +1,72 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import type { PublicConfig } from '../../../server/shared';
+import type { CommandType, PublicConfig } from '../../../server/shared';
 import { api, attempt, getConfig, notify, session } from '../api';
 import Toggle from '../components/Toggle.vue';
 
 const config = ref<PublicConfig | null>(null);
 const darkHoursOn = ref(false);
 const darkHours = ref({ start: '20:00', end: '07:00' });
+const quietOn = ref(false);
+const quietHours = ref({ start: '20:00', end: '07:00', max: 30 });
+const lockHoursOn = ref(false);
+const lockHours = ref({ start: '19:00', end: '07:00' });
 const pin = ref({ current: '', next: '' });
+// Typed as a Record so a new server command type fails the build until it gets a label here.
+const commandLabels: Record<CommandType, string> = {
+	'play-folder': 'Play a folder',
+	'play-track': 'Play a story',
+	'play-radio': 'Play music (radio)',
+	'stop': 'Stop',
+	'pause': 'Pause',
+	'resume': 'Resume',
+	'next': 'Next track',
+	'louder': 'Louder',
+	'quieter': 'Quieter',
+	'max-volume': 'Volume to max',
+	'time': 'What time is it',
+	'day': 'What day is it',
+	'weather': 'Weather',
+};
+
+function saveLockHours() {
+	void save({ voice: { ...config.value!.voice, hours: lockHoursOn.value ? lockHours.value : null } });
+}
+
+function toggleCommand(type: CommandType, on: boolean) {
+	const allowed = config.value!.voice.allowed.filter((t) => t !== type);
+	void save({ voice: { ...config.value!.voice, allowed: on ? [...allowed, type] : allowed } });
+}
+const placeQuery = ref('');
+const places = ref<Pick<PublicConfig['weather'], 'place' | 'latitude' | 'longitude'>[]>([]);
+const weatherPreview = ref('');
+
+async function searchPlaces() {
+	if (placeQuery.value.trim()) {
+		places.value = await attempt(() => api<typeof places.value>(`/weather/places?q=${encodeURIComponent(placeQuery.value)}`)) ?? [];
+	}
+}
+
+async function choosePlace(place: typeof places.value[number]) {
+	await save({ weather: { ...config.value!.weather, ...place } });
+	places.value = [];
+	placeQuery.value = '';
+	weatherPreview.value = '';
+}
+
+async function previewWeather() {
+	const result = await attempt(() => api<{ text: string }>('/weather'));
+	weatherPreview.value = result?.text ?? '';
+}
 
 onMounted(async () => {
 	config.value = await getConfig();
 	darkHoursOn.value = Boolean(config.value.lcd.darkHours);
 	darkHours.value = config.value.lcd.darkHours ?? darkHours.value;
+	quietOn.value = Boolean(config.value.volume.quietHours);
+	quietHours.value = config.value.volume.quietHours ?? quietHours.value;
+	lockHoursOn.value = Boolean(config.value.voice.hours);
+	lockHours.value = config.value.voice.hours ?? lockHours.value;
 });
 
 async function save(section: Partial<PublicConfig>) {
@@ -20,6 +74,10 @@ async function save(section: Partial<PublicConfig>) {
 	if (saved) {
 		config.value = saved;
 	}
+}
+
+function saveVolume() {
+	void save({ volume: { ...config.value!.volume, quietHours: quietOn.value ? quietHours.value : null } });
 }
 
 function saveLcd() {
@@ -51,7 +109,50 @@ async function logout() {
 			<div class="flex justify-end"><button class="btn-primary">Save</button></div>
 		</form>
 
-		<form class="card space-y-3" @submit.prevent="save({ volume: config.volume })">
+		<section class="card space-y-3">
+			<h2 class="label">Voice commands</h2>
+			<label class="flex items-center justify-between gap-3 text-sm">
+				Only allow selected commands
+				<Toggle
+					:model-value="config.voice.restricted"
+					label="Only allow selected commands"
+					@update:model-value="save({ voice: { ...config.voice, restricted: $event } })"
+				/>
+			</label>
+			<template v-if="config.voice.restricted">
+				<label class="flex items-center justify-between gap-3 text-sm">
+					Only at certain times
+					<Toggle v-model="lockHoursOn" label="Only at certain times" @update:model-value="saveLockHours" />
+				</label>
+				<div v-if="lockHoursOn" class="grid grid-cols-2 gap-3">
+					<label class="text-sm">
+						<span class="mb-1 block text-slate-400">From</span>
+						<input v-model="lockHours.start" type="time" class="input" @change="saveLockHours">
+					</label>
+					<label class="text-sm">
+						<span class="mb-1 block text-slate-400">Until</span>
+						<input v-model="lockHours.end" type="time" class="input" @change="saveLockHours">
+					</label>
+				</div>
+				<p class="text-xs text-slate-500">
+					{{ lockHoursOn ? `Outside ${lockHours.start}-${lockHours.end} every command works.` : 'The lockdown applies all day.' }}
+				</p>
+			</template>
+			<div v-if="config.voice.restricted" class="grid gap-x-4 gap-y-2.5 sm:grid-cols-2">
+				<label v-for="(label, type) in commandLabels" :key="type" class="flex items-center gap-2.5 text-sm">
+					<input
+						type="checkbox"
+						class="size-4 accent-amber-300"
+						:checked="config.voice.allowed.includes(type)"
+						@change="toggleCommand(type, ($event.target as HTMLInputElement).checked)"
+					>
+					{{ label }}
+				</label>
+			</div>
+			<p class="text-xs text-slate-500">Blocked commands play the error chime and show as "blocked" on the Voice page. The portal and schedules are not affected.</p>
+		</section>
+
+		<form class="card space-y-3" @submit.prevent="saveVolume">
 			<h2 class="label">Volume</h2>
 			<div class="grid grid-cols-3 gap-3">
 				<label class="text-sm">
@@ -68,6 +169,25 @@ async function logout() {
 				</label>
 			</div>
 			<p class="text-xs text-slate-500">The maximum applies to voice, schedules and this portal, so little ears stay safe.</p>
+			<label class="flex items-center justify-between gap-3 text-sm">
+				Lower the maximum at night
+				<Toggle v-model="quietOn" label="Lower the maximum at night" />
+			</label>
+			<div v-if="quietOn" class="grid grid-cols-3 gap-3">
+				<label class="text-sm">
+					<span class="mb-1 block text-slate-400">From</span>
+					<input v-model="quietHours.start" type="time" class="input">
+				</label>
+				<label class="text-sm">
+					<span class="mb-1 block text-slate-400">Until</span>
+					<input v-model="quietHours.end" type="time" class="input">
+				</label>
+				<label class="text-sm">
+					<span class="mb-1 block text-slate-400">Night max</span>
+					<input v-model.number="quietHours.max" type="number" min="0" max="100" class="input">
+				</label>
+			</div>
+			<p v-if="quietOn" class="text-xs text-slate-500">If it is louder than the night max when the time starts, it is turned down quietly.</p>
 			<div class="flex justify-end"><button class="btn-primary">Save</button></div>
 		</form>
 
@@ -104,6 +224,36 @@ async function logout() {
 			<p class="text-xs text-slate-500">An I2C address change applies after the service restarts.</p>
 			<div class="flex justify-end"><button class="btn-primary">Save</button></div>
 		</form>
+
+		<section class="card space-y-3">
+			<h2 class="label">Weather</h2>
+			<div class="flex items-center justify-between gap-3 text-sm">
+				<span :class="config.weather.place ? '' : 'text-slate-400'">{{ config.weather.place || 'No city picked yet' }}</span>
+				<select
+					:value="config.weather.units"
+					class="input w-auto py-1.5"
+					aria-label="Temperature units"
+					@change="save({ weather: { ...config.weather, units: ($event.target as HTMLSelectElement).value as PublicConfig['weather']['units'] } })"
+				>
+					<option value="fahrenheit">°F</option>
+					<option value="celsius">°C</option>
+				</select>
+			</div>
+			<form class="flex gap-2" @submit.prevent="searchPlaces">
+				<input v-model="placeQuery" class="input" placeholder="Search for your city" aria-label="Search for your city">
+				<button class="btn-ghost shrink-0">Search</button>
+			</form>
+			<ul v-if="places.length" class="space-y-1">
+				<li v-for="place in places" :key="`${place.latitude},${place.longitude}`">
+					<button type="button" class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/5" @click="choosePlace(place)">{{ place.place }}</button>
+				</li>
+			</ul>
+			<div v-if="config.weather.place" class="flex items-center gap-3">
+				<button type="button" class="btn-ghost shrink-0" @click="previewWeather">Test</button>
+				<span class="text-sm text-slate-300">{{ weatherPreview }}</span>
+			</div>
+			<p class="text-xs text-slate-500">Say "{{ config.wakePhrase }}, what's the weather". Forecasts come from open-meteo.com.</p>
+		</section>
 
 		<section class="card space-y-3">
 			<h2 class="label">Bluetooth</h2>

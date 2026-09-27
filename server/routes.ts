@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { findStation } from './actions.js';
+import { spokenWeather } from './answers.js';
 import { applyBluetooth } from './bluetooth.js';
 import { checkPin, isAuthenticated, issueSession, lockedUntilTime, logout, requireAuth } from './auth.js';
 import { store } from './config.js';
@@ -92,7 +93,7 @@ api.post('/player/:action{stop|pause|resume|next}', async (c) => {
 
 api.put('/player/volume', async (c) => {
 	const { volume } = await c.req.json<{ volume: number }>();
-	await player.setVolume(Number(volume));
+	await player.setVolume(Number(volume), true);
 	return c.json(player.getPlayerState());
 });
 
@@ -165,6 +166,35 @@ interface RadioBrowserStation {
 	bitrate: number;
 	tags: string;
 }
+
+interface GeocodingResult {
+	name: string;
+	admin1?: string;
+	country?: string;
+	latitude: number;
+	longitude: number;
+}
+
+api.get('/weather/places', async (c) => {
+	const query = c.req.query('q')?.trim();
+	if (!query) {
+		return c.json([]);
+	}
+	const params = new URLSearchParams({ name: query, count: '8', language: 'en', format: 'json' });
+	const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`, { signal: AbortSignal.timeout(8000) });
+	if (!res.ok) {
+		throw new Error(`City search failed (${res.status})`);
+	}
+	const { results = [] } = await res.json() as { results?: GeocodingResult[] };
+	return c.json(results.map((r) => ({
+		place: [r.name, r.admin1, r.country].filter(Boolean).join(', '),
+		latitude: r.latitude,
+		longitude: r.longitude,
+	})));
+});
+
+// Lets Settings preview the spoken weather sentence without a microphone.
+api.get('/weather', async (c) => c.json({ text: await spokenWeather() }));
 
 api.get('/radio/search', async (c) => {
 	const query = c.req.query('q')?.trim();

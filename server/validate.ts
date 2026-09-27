@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { normalize } from './commands.js';
+import { COMMAND_TYPES, normalize } from './commands.js';
 import type { Config, FolderSettings, PublicConfig, Schedule, Station } from './shared.js';
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -73,10 +73,15 @@ export function applyConfigPatch(config: Config, patch: Partial<PublicConfig>): 
 	}
 	if (patch.volume) {
 		const volume = { ...config.volume, ...patch.volume };
+		const quiet = volume.quietHours;
+		if (quiet && (!TIME.test(quiet.start) || !TIME.test(quiet.end))) {
+			throw new Error('Night volume hours must look like 20:00');
+		}
 		next.volume = {
 			max: int(volume.max, 'Max volume', 1, 100),
 			default: int(volume.default, 'Default volume', 0, 100),
 			step: int(volume.step, 'Volume step', 1, 50),
+			quietHours: quiet ? { start: quiet.start, end: quiet.end, max: int(quiet.max, 'Night max volume', 0, 100) } : null,
 		};
 		next.volume.default = Math.min(next.volume.default, next.volume.max);
 	}
@@ -111,6 +116,36 @@ export function applyConfigPatch(config: Config, patch: Partial<PublicConfig>): 
 	}
 	if (patch.bluetooth) {
 		next.bluetooth = { enabled: Boolean(patch.bluetooth.enabled) };
+	}
+	if (patch.voice) {
+		const voice = { ...config.voice, ...patch.voice };
+		if (voice.hours && (!TIME.test(voice.hours.start) || !TIME.test(voice.hours.end))) {
+			throw new Error('Voice lockdown hours must look like 19:00');
+		}
+		next.voice = {
+			restricted: Boolean(voice.restricted),
+			allowed: COMMAND_TYPES.filter((type) => (voice.allowed ?? []).includes(type)),
+			hours: voice.hours ? { start: voice.hours.start, end: voice.hours.end } : null,
+		};
+	}
+	if (patch.weather) {
+		const weather = { ...config.weather, ...patch.weather };
+		const hasLocation = weather.latitude !== null && weather.longitude !== null;
+		const latitude = Number(weather.latitude);
+		const longitude = Number(weather.longitude);
+		const validLocation = Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+		if (hasLocation && !validLocation) {
+			throw new Error('Weather location is out of range');
+		}
+		if (weather.units !== 'fahrenheit' && weather.units !== 'celsius') {
+			throw new Error('Weather units must be fahrenheit or celsius');
+		}
+		next.weather = {
+			place: String(weather.place ?? '').trim(),
+			latitude: hasLocation ? latitude : null,
+			longitude: hasLocation ? longitude : null,
+			units: weather.units,
+		};
 	}
 	return next;
 }

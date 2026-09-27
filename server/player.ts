@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
@@ -6,12 +7,15 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { ROOT_DIR, store } from './config.js';
 import { events } from './events.js';
-import { folderSettings, getTracks } from './library.js';
+import { displayTitle, folderSettings, getTracks } from './library.js';
+import { logLines, stopProcess } from './proc.js';
 import type { PlayerState, Station } from './shared.js';
+import { hhmm, inTimeRange } from './time.js';
 
 const SOCKET = path.join(os.tmpdir(), 'sleepy-mpv.sock');
 const PLAYLIST = path.join(os.tmpdir(), 'sleepy-playlist.m3u');
 const DUCK_RATIO = 0.3;
+const VOLUME_CAP_CHECK_MS = 20_000;
 
 const state: PlayerState = {
 	available: false,
@@ -19,6 +23,7 @@ const state: PlayerState = {
 	source: null,
 	track: null,
 	volume: store.state.volume ?? store.config.volume.default,
+	maxVolume: store.config.volume.max,
 };
 
 let proc: ChildProcess | null = null;
@@ -106,7 +111,7 @@ function handleMessage(msg: MpvMessage) {
 		idle = msg.data === true;
 		updateStatus();
 	} else if (msg.name === 'media-title') {
-		state.track = typeof msg.data === 'string' ? msg.data : null;
+		state.track = typeof msg.data === 'string' ? displayTitle(msg.data) : null;
 		emit();
 	}
 }
@@ -127,7 +132,11 @@ async function connect(): Promise<net.Socket> {
 
 function deviceArgs() {
 	const device = store.config.audio.mpvDevice;
-	return device && device !== 'auto' ? [`--audio-device=${device}`] : [];
+	if (device && device !== 'auto') {
+		return [`--audio-device=${device}`];
+	}
+	// Go straight to ALSA's default (dmix from setup-pi.sh) instead of probing JACK/PulseAudio first.
+	return process.platform === 'linux' ? ['--ao=alsa'] : [];
 }
 
 async function startMpv() {
@@ -169,7 +178,7 @@ async function startMpv() {
 		}
 	};
 
-	child.stderr?.on('data', (chunk: Buffer) => process.stderr.write(`[mpv] ${chunk}`));
+	logLines(child.stderr, 'mpv');
 	child.on('exit', onGone);
 	child.on('error', (err: NodeJS.ErrnoException) => {
 		if (err.code === 'ENOENT') {
@@ -196,7 +205,7 @@ async function startMpv() {
 		emit();
 	} catch (err) {
 		console.error('[player]', (err as Error).message);
-		child.kill();
+		stopProcess(child);
 	}
 }
 
@@ -209,16 +218,28 @@ function shuffled<T>(items: T[]) {
 	return copy;
 }
 
-export async function playFolder(name: string) {
+// `startTrack` plays that track first and then carries on through the folder.
+export async function playFolder(name: string, startTrack = 0) {
 	const tracks = getTracks(name);
 	if (!tracks.length) {
 		throw new Error(`No tracks found in "${name}"`);
 	}
 	const settings = folderSettings(name);
-	const list = settings.shuffle ? shuffled(tracks) : tracks;
+	let list = tracks;
+	let startIndex = startTrack;
+	if (settings.shuffle) {
+		const first = tracks[startTrack] ?? tracks[0];
+		list = [first, ...shuffled(tracks.filter((track) => track !== first))];
+		startIndex = 0;
+	}
 	await writeFile(PLAYLIST, `${list.join('\n')}\n`);
 	await command('set_property', 'loop-playlist', settings.loop ? 'inf' : 'no');
+	// Paused while loading so the first track does not blip before jumping to the requested one.
+	await command('set_property', 'pause', true);
 	await command('loadlist', PLAYLIST, 'replace');
+	if (startIndex > 0) {
+		await command('playlist-play-index', startIndex);
+	}
 	await command('set_property', 'pause', false);
 	state.source = { type: 'folder', name, label: name };
 	emit();
@@ -248,18 +269,48 @@ export async function next() {
 	await command('playlist-next', 'weak');
 }
 
-export async function setVolume(volume: number) {
-	state.volume = Math.max(0, Math.min(store.config.volume.max, Math.round(volume)));
+// `feedback` plays a tick at the new level so a parent or child hears the change, but not when settings merely re-clamp it.
+export async function setVolume(volume: number, feedback = false) {
+	state.maxVolume = maxAllowed();
+	state.volume = Math.max(0, Math.min(state.maxVolume, Math.round(volume)));
 	store.state.volume = state.volume;
 	await store.saveState();
 	emit();
+	// Played before talking to mpv so the tick still confirms the speaker works when the main player is down.
+	if (feedback) {
+		chime('volume');
+	}
 	if (!ducked && socket) {
 		await command('set_property', 'volume', state.volume);
 	}
 }
 
 export function changeVolume(direction: 1 | -1) {
-	return setVolume(state.volume + direction * store.config.volume.step);
+	return setVolume(state.volume + direction * store.config.volume.step, true);
+}
+
+export function maxVolume() {
+	return setVolume(maxAllowed(), true);
+}
+
+// The night cap from Settings wins over the normal max while its time window is active.
+export function maxAllowed(now = new Date()) {
+	const { max, quietHours } = store.config.volume;
+	if (quietHours && inTimeRange(hhmm(now), quietHours)) {
+		return Math.min(max, quietHours.max);
+	}
+	return max;
+}
+
+// Lowers the volume silently (no tick) when the night window starts; it is not raised again when the window ends.
+async function enforceVolumeCap() {
+	const max = maxAllowed();
+	if (state.volume > max) {
+		await setVolume(max);
+	} else if (state.maxVolume !== max) {
+		state.maxVolume = max;
+		emit();
+	}
 }
 
 // Lowered while the voice command window is open so the mic can hear the child over the music.
@@ -273,11 +324,49 @@ export async function duck(on: boolean) {
 	}
 }
 
-export function chime(name: 'wake' | 'error') {
+// MBROLA's us3 voice sounds far less robotic than stock espeak, but it is built by setup-pi.sh and absent on dev machines.
+const MBROLA_VOICE = '/usr/share/mbrola/us3/us3';
+const speechArgs = existsSync(MBROLA_VOICE) ? ['-v', 'mb-us3', '-s', '140'] : ['-v', 'en-us', '-s', '145'];
+
+// espeak-ng renders a WAV to stdout and a short-lived mpv plays it, so speech mixes over music like the chimes do.
+export function speak(text: string) {
+	return new Promise<void>((resolve) => {
+		void duck(true).catch(() => {});
+		const tts = spawn('espeak-ng', [...speechArgs, '--stdout', text], { stdio: ['ignore', 'pipe', 'ignore'] });
+		const out = spawn('mpv', [
+			'--no-video',
+			'--no-terminal',
+			`--volume=${Math.max(state.volume, 30)}`,
+			...deviceArgs(),
+			'-',
+		], { stdio: ['pipe', 'ignore', 'ignore'] });
+		tts.stdout.pipe(out.stdin);
+		out.stdin.on('error', () => {});
+		tts.on('error', (err: NodeJS.ErrnoException) => {
+			console.error(err.code === 'ENOENT' ? '[player] espeak-ng is not installed (brew/apt install espeak-ng)' : `[player] espeak-ng failed: ${err.message}`);
+			stopProcess(out);
+		});
+		let finished = false;
+		const done = () => {
+			if (finished) {
+				return;
+			}
+			finished = true;
+			void duck(false).catch(() => {});
+			resolve();
+		};
+		out.on('close', done);
+		out.on('error', done);
+	});
+}
+
+export function chime(name: 'wake' | 'error' | 'volume') {
+	// The volume tick plays at the new level on purpose; alerts get a floor so they are never inaudible.
+	const volume = name === 'volume' ? state.volume : Math.max(state.volume, 30);
 	const child = spawn('mpv', [
 		'--no-video',
 		'--no-terminal',
-		`--volume=${Math.max(state.volume, 30)}`,
+		`--volume=${volume}`,
 		...deviceArgs(),
 		path.join(ROOT_DIR, 'assets', `chime-${name}.wav`),
 	], { stdio: 'ignore' });
@@ -286,9 +375,12 @@ export function chime(name: 'wake' | 'error') {
 
 export function startPlayer() {
 	void startMpv();
+	const enforce = () => void enforceVolumeCap().catch((err: Error) => console.error('[player]', err.message));
+	enforce();
+	setInterval(enforce, VOLUME_CAP_CHECK_MS);
 }
 
 export function stopPlayer() {
 	shuttingDown = true;
-	proc?.kill();
+	stopProcess(proc);
 }

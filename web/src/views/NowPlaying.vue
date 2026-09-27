@@ -80,7 +80,7 @@ const step = (direction: 1 | -1) => setVolume(volume.value + direction * (config
 					v-model.number="volume"
 					type="range"
 					min="0"
-					:max="config?.volume.max ?? 100"
+					:max="player.maxVolume"
 					class="h-2 w-full cursor-pointer accent-amber-300"
 					aria-label="Volume"
 					@change="setVolume(volume)"
@@ -88,6 +88,7 @@ const step = (direction: 1 | -1) => setVolume(volume.value + direction * (config
 				<button class="btn-ghost size-10 shrink-0 rounded-full p-0 text-lg" aria-label="Louder" @click="step(1)">+</button>
 				<span class="w-10 text-right text-sm text-slate-400 tabular-nums">{{ volume }}%</span>
 			</div>
+			<p v-if="config && player.maxVolume < config.volume.max" class="mt-2 text-right text-xs text-amber-300/80">Night limit: {{ player.maxVolume }}%</p>
 		</section>
 
 		<section class="card">

@@ -22,7 +22,7 @@ function resultClass(result: string) {
 	if (result.startsWith('ignored')) {
 		return 'text-slate-500';
 	}
-	if (result === 'not understood' || result.startsWith('failed')) {
+	if (result === 'not understood' || result.startsWith('failed') || result.startsWith('blocked')) {
 		return 'text-rose-300';
 	}
 	return 'text-emerald-300';
@@ -59,7 +59,7 @@ onMounted(async () => {
 				<button class="btn-primary shrink-0">Send</button>
 			</div>
 			<p class="mt-2 text-xs text-slate-500">
-				Runs exactly as if it was heard, so include the wake phrase. Commands: play &lt;folder&gt;, play music, stop, pause, resume, next, louder, quieter.
+				Runs exactly as if it was heard, so include the wake phrase. Commands: play &lt;folder&gt;, play &lt;story&gt; [in &lt;folder&gt;], play music, stop, pause, resume, next, louder, quieter, volume to max, what time is it, what day is it, what's the weather.
 			</p>
 		</form>
 
@@ -67,10 +67,11 @@ onMounted(async () => {
 			<h2 class="label">Recent</h2>
 			<p v-if="!voice.log.length" class="text-sm text-slate-400">Nothing heard yet.</p>
 			<ul class="divide-y divide-white/5">
-				<li v-for="entry in voice.log" :key="entry.at" class="flex items-baseline gap-3 py-2 text-sm">
+				<li v-for="entry in voice.log" :key="entry.at" class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 text-sm">
 					<span class="w-20 shrink-0 text-xs text-slate-500 tabular-nums">{{ time(entry.at) }}</span>
 					<span class="min-w-0 flex-1 truncate">"{{ entry.text }}"</span>
 					<span class="shrink-0 text-xs" :class="resultClass(entry.result)">{{ entry.result }}</span>
+					<span v-if="entry.reply" class="basis-full pl-23 text-xs text-slate-400">"{{ entry.reply }}"</span>
 				</li>
 			</ul>
 		</section>

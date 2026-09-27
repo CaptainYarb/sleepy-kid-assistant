@@ -1,5 +1,9 @@
 // Types shared by the server and the web portal. Keep this file type-only.
 
+import type { Command } from './commands.js';
+
+export type CommandType = Command['type'];
+
 export interface FolderSettings {
 	spokenName: string;
 	shuffle: boolean;
@@ -18,15 +22,22 @@ export interface TimeRange {
 	end: string;
 }
 
+export interface QuietHours extends TimeRange {
+	max: number;
+}
+
 export interface Config {
 	pin: string;
 	wakePhrase: string;
-	volume: { default: number; max: number; step: number };
+	volume: { default: number; max: number; step: number; quietHours: QuietHours | null };
 	audio: { mpvDevice: string; recordCommand: string };
 	folders: Record<string, FolderSettings>;
 	radio: { defaultStation: string; stations: Station[] };
 	lcd: { enabled: boolean; address: string; backlightTimeoutSec: number; darkHours: TimeRange | null };
 	bluetooth: { enabled: boolean };
+	weather: { place: string; latitude: number | null; longitude: number | null; units: 'fahrenheit' | 'celsius' };
+	// `hours` limits the lockdown to a time window; null means it applies all day.
+	voice: { restricted: boolean; allowed: CommandType[]; hours: TimeRange | null };
 }
 
 export type PublicConfig = Omit<Config, 'pin'>;
@@ -57,12 +68,15 @@ export interface PlayerState {
 	source: PlayerSource | null;
 	track: string | null;
 	volume: number;
+	// The cap in effect right now, which is lower than the configured max during night hours.
+	maxVolume: number;
 }
 
 export interface VoiceEntry {
 	at: number;
 	text: string;
 	result: string;
+	reply?: string;
 }
 
 export interface VoiceStatus {

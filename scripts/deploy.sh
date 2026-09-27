@@ -19,11 +19,12 @@ npm run build
 ssh "$HOST" "mkdir -p $APP_DIR/py"
 # Named sources (no trailing slash) so --delete only prunes inside these folders, never data/ or the venv.
 rsync -az --delete dist assets scripts deploy package.json package-lock.json "$HOST:$APP_DIR/"
-rsync -az py/listen.py py/lcd.py py/requirements.txt "$HOST:$APP_DIR/py/"
+rsync -az py/listen.py py/lcd.py py/fix_execstack.py py/requirements.txt "$HOST:$APP_DIR/py/"
 
 if [ "$SETUP" = true ]; then
 	ssh -t "$HOST" "cd $APP_DIR && ./scripts/setup-pi.sh"
 else
-	ssh "$HOST" "cd $APP_DIR && npm ci --omit=dev --no-audit --no-fund --loglevel=error && sudo systemctl restart sleepy"
+	# -t gives sudo a terminal to ask for a password if the passwordless restart rule from setup-pi.sh is missing.
+	ssh -t "$HOST" "cd $APP_DIR && npm ci --omit=dev --no-audit --no-fund --loglevel=error && sudo systemctl restart sleepy"
 fi
 echo "Deployed to $HOST"

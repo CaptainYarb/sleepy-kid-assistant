@@ -2,14 +2,9 @@ import { findStation, runCommand } from './actions.js';
 import { store } from './config.js';
 import * as player from './player.js';
 import type { NextRun, Schedule } from './shared.js';
+import { hhmm, pad } from './time.js';
 
 const TICK_MS = 20_000;
-
-const pad = (n: number) => String(n).padStart(2, '0');
-
-export function hhmm(date: Date) {
-	return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
 
 // Identifies one scheduled minute so a schedule fires once even though the tick runs several times per minute.
 export function fireKey(date: Date) {

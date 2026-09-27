@@ -3,10 +3,11 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { runCommand } from './actions.js';
-import { buildGrammar, describeCommand, parseCommand, splitWake, type VoiceFolder } from './commands.js';
+import { buildGrammar, describeCommand, isAllowed, parseCommand, splitWake, type VoiceFolder } from './commands.js';
 import { ROOT_DIR, store } from './config.js';
 import { events } from './events.js';
-import { listFolders } from './library.js';
+import { getTracks, listFolders, trackTitle } from './library.js';
+import { logLines, stopProcess } from './proc.js';
 import * as player from './player.js';
 import type { VoiceEntry, VoiceStatus } from './shared.js';
 
@@ -43,11 +44,12 @@ function emit() {
 function voiceFolders(): VoiceFolder[] {
 	return listFolders()
 		.filter((f) => f.settings.enabled)
-		.map((f) => ({ name: f.name, spokenName: f.settings.spokenName }));
+		.map((f) => ({ name: f.name, spokenName: f.settings.spokenName, tracks: getTracks(f.name).map(trackTitle) }));
 }
 
-function addLog(text: string, result: string) {
-	const entry: VoiceEntry = { at: Date.now(), text, result };
+function addLog(text: string, result: string, reply?: string) {
+	const entry: VoiceEntry = { at: Date.now(), text, result, reply };
+	console.log(`[voice] heard "${text}" -> ${result}${reply ? `: ${reply}` : ''}`);
 	status.log.unshift(entry);
 	status.log.length = Math.min(status.log.length, LOG_SIZE);
 	emit();
@@ -92,9 +94,17 @@ export async function handleText(text: string) {
 		addLog(text, 'not understood');
 		return;
 	}
+	if (!isAllowed(command.type, store.config.voice, new Date())) {
+		player.chime('error');
+		addLog(text, `blocked: ${describeCommand(command)}`);
+		return;
+	}
 	try {
-		await runCommand(command);
-		addLog(text, describeCommand(command));
+		const reply = await runCommand(command);
+		addLog(text, describeCommand(command), reply || undefined);
+		if (reply) {
+			await player.speak(reply);
+		}
 	} catch (err) {
 		player.chime('error');
 		addLog(text, `failed: ${(err as Error).message}`);
@@ -104,7 +114,7 @@ export async function handleText(text: string) {
 function stopChildren() {
 	generation++;
 	for (const child of children) {
-		child.kill();
+		stopProcess(child, { group: true });
 	}
 	children = [];
 	status.running = false;
@@ -129,15 +139,15 @@ function start() {
 	}
 	const gen = ++generation;
 	const python = existsSync(VENV_PYTHON) ? VENV_PYTHON : 'python3';
-	const recorder = spawn('sh', ['-c', store.config.audio.recordCommand], { stdio: ['ignore', 'pipe', 'pipe'] });
-	const recognizer = spawn(python, [path.join(PY_DIR, 'listen.py'), MODEL_DIR, currentGrammar], { stdio: ['pipe', 'pipe', 'pipe'] });
+	const recorder = spawn('sh', ['-c', store.config.audio.recordCommand], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+	const recognizer = spawn(python, [path.join(PY_DIR, 'listen.py'), MODEL_DIR, currentGrammar], { stdio: ['pipe', 'pipe', 'pipe'], detached: true });
 	children = [recorder, recognizer];
 
 	recorder.stdout.pipe(recognizer.stdin);
 	// The recognizer can exit first, and a write to its closed stdin should not crash the server.
 	recognizer.stdin.on('error', () => {});
-	recorder.stderr.on('data', (chunk: Buffer) => process.stderr.write(`[mic] ${chunk}`));
-	recognizer.stderr.on('data', (chunk: Buffer) => process.stderr.write(`[vosk] ${chunk}`));
+	logLines(recorder.stderr, 'mic');
+	logLines(recognizer.stderr, 'vosk');
 
 	createInterface({ input: recognizer.stdout }).on('line', (line) => {
 		let msg: { type: string; text?: string; words?: string[] };

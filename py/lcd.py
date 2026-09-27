@@ -58,7 +58,15 @@ class Lcd:
 def main():
     address = int(sys.argv[1], 16) if len(sys.argv) > 1 else 0x27
     with SMBus(1) as bus:
-        lcd = Lcd(bus, address)
+        try:
+            lcd = Lcd(bus, address)
+        except OSError:
+            print(
+                f"No LCD answered at {hex(address)}. Check the wiring and run 'i2cdetect -y 1' "
+                "to find the address, or turn the screen off in Settings.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         for line in sys.stdin:
             try:
                 message = json.loads(line)

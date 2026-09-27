@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { COMMAND_TYPES } from './commands.js';
 import type { Config, Schedule } from './shared.js';
 
 export const DATA_DIR = path.resolve(process.env.DATA_DIR ?? 'data');
@@ -18,7 +19,7 @@ export interface State {
 const defaultConfig: Config = {
 	pin: '',
 	wakePhrase: 'hey sleepy',
-	volume: { default: 40, max: 80, step: 10 },
+	volume: { default: 40, max: 80, step: 10, quietHours: null },
 	audio: {
 		mpvDevice: 'auto',
 		recordCommand: process.platform === 'darwin'
@@ -30,6 +31,9 @@ const defaultConfig: Config = {
 	lcd: { enabled: true, address: '0x27', backlightTimeoutSec: 30, darkHours: null },
 	// Off by default so the Bluetooth radio does not draw power until someone opts in.
 	bluetooth: { enabled: false },
+	weather: { place: '', latitude: null, longitude: null, units: 'fahrenheit' },
+	// Unrestricted by default; parents can limit voice to an allowlist of command types in Settings.
+	voice: { restricted: false, allowed: [...COMMAND_TYPES], hours: null },
 };
 
 function readJson<T>(file: string, fallback: T): T {
@@ -60,6 +64,8 @@ function loadConfig(): Config {
 		radio: { ...defaultConfig.radio, ...file.radio },
 		lcd: { ...defaultConfig.lcd, ...file.lcd },
 		bluetooth: { ...defaultConfig.bluetooth, ...file.bluetooth },
+		weather: { ...defaultConfig.weather, ...file.weather },
+		voice: { ...defaultConfig.voice, ...file.voice },
 	};
 }
 

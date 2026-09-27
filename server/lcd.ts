@@ -3,14 +3,18 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { ROOT_DIR, store } from './config.js';
 import { events } from './events.js';
+import { logLines, stopProcess } from './proc.js';
 import { getPlayerState } from './player.js';
-import { hhmm, nextRun } from './scheduler.js';
-import type { LcdState, TimeRange } from './shared.js';
+import { nextRun } from './scheduler.js';
+import type { LcdState } from './shared.js';
+import { hhmm, inTimeRange } from './time.js';
 import { getVoiceStatus } from './voice.js';
 
 const COLS = 16;
 const FRAME_MS = 400;
 const FLASH_MS = 3000;
+// Spoken answers scroll across 11 columns, so they stay up long enough to read.
+const REPLY_FLASH_MS = 10_000;
 const SCROLL_GAP = '   ';
 // The bottom-right corner is reserved for the volume, e.g. " 40%".
 const VOLUME_COLS = 4;
@@ -20,7 +24,7 @@ const useHardware = process.env.LCD !== 'mock' && process.platform === 'linux';
 
 let state: LcdState = { lines: ['', ''], backlight: false };
 let lastActivity = Date.now();
-let flash: { text: string; until: number } | null = null;
+let flash: { title: string; text: string; until: number } | null = null;
 const scrollFrames: [number, number] = [0, 0];
 let rawLines: [string, string] = ['', ''];
 let proc: ChildProcess | null = null;
@@ -46,14 +50,6 @@ export function marquee(text: string, frame: number, width = COLS) {
 	return (loop + loop).slice(offset, offset + width);
 }
 
-export function inTimeRange(time: string, range: TimeRange) {
-	if (range.start <= range.end) {
-		return time >= range.start && time < range.end;
-	}
-	// Ranges like 20:00-07:00 wrap past midnight.
-	return time >= range.start || time < range.end;
-}
-
 function spread(left: string, right: string) {
 	return left.slice(0, COLS - right.length - 1).padEnd(COLS - right.length) + right;
 }
@@ -69,7 +65,7 @@ function compose(now: Date): [string, string] {
 		return ['Listening...', 'Go ahead'];
 	}
 	if (flash && flash.until > now.getTime()) {
-		return ['Heard:', flash.text];
+		return [flash.title, flash.text];
 	}
 	if (player.status !== 'stopped' && player.source) {
 		const icon = player.status === 'paused' ? '||' : '>';
@@ -117,7 +113,7 @@ function startHardware() {
 	const child = spawn(python, [path.join(ROOT_DIR, 'py', 'lcd.py'), store.config.lcd.address], { stdio: ['pipe', 'ignore', 'pipe'] });
 	proc = child;
 	child.stdin.on('error', () => {});
-	child.stderr.on('data', (chunk: Buffer) => process.stderr.write(`[lcd] ${chunk}`));
+	logLines(child.stderr, 'lcd');
 	let gone = false;
 	const onGone = () => {
 		if (gone || shuttingDown) {
@@ -151,10 +147,15 @@ export function startLcd() {
 		if (latest && latest.at !== lastLogAt) {
 			lastLogAt = latest.at;
 			lastActivity = Date.now();
-			if (!latest.result.startsWith('ignored')) {
-				flash = { text: latest.result, until: Date.now() + FLASH_MS };
+			if (latest.reply) {
+				const title = `${latest.result[0].toUpperCase()}${latest.result.slice(1)}:`;
+				flash = { title, text: latest.reply, until: Date.now() + REPLY_FLASH_MS };
+			} else if (!latest.result.startsWith('ignored')) {
+				flash = { title: 'Heard:', text: latest.result, until: Date.now() + FLASH_MS };
 			}
 		}
+		// Redraw now instead of on the next frame so the screen reacts together with the wake chime.
+		render();
 	});
 	if (useHardware && store.config.lcd.enabled) {
 		startHardware();
@@ -165,5 +166,5 @@ export function startLcd() {
 
 export function stopLcd() {
 	shuttingDown = true;
-	proc?.kill();
+	stopProcess(proc);
 }

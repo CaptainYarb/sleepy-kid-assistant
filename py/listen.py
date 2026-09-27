@@ -25,7 +25,7 @@ def main():
     model = Model(model_dir)
 
     words = {word for phrase in json.loads(grammar_json) if phrase != "[unk]" for word in phrase.split()}
-    unknown = sorted(word for word in words if model.find_word(word) == -1)
+    unknown = sorted(word for word in words if model.vosk_model_find_word(word) == -1)
     emit({"type": "oov", "words": unknown})
 
     recognizer = KaldiRecognizer(model, SAMPLE_RATE, grammar_json)

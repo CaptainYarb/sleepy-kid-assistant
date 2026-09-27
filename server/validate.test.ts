@@ -5,11 +5,14 @@ import { applyConfigPatch, parseSchedule } from './validate.js';
 const config: Config = {
 	pin: '123456',
 	wakePhrase: 'hey buddy',
-	volume: { default: 40, max: 80, step: 10 },
+	volume: { default: 40, max: 80, step: 10, quietHours: null },
 	audio: { mpvDevice: 'auto', recordCommand: 'arecord' },
 	folders: {},
 	radio: { defaultStation: 'a', stations: [{ id: 'a', name: 'A', url: 'https://a.example/stream' }] },
 	lcd: { enabled: true, address: '0x27', backlightTimeoutSec: 30, darkHours: null },
+	bluetooth: { enabled: false },
+	weather: { place: '', latitude: null, longitude: null, units: 'fahrenheit' },
+	voice: { restricted: false, allowed: [], hours: null },
 };
 
 describe('parseSchedule', () => {
@@ -30,7 +33,7 @@ describe('parseSchedule', () => {
 
 describe('applyConfigPatch', () => {
 	it('keeps the default volume within the maximum', () => {
-		expect(applyConfigPatch(config, { volume: { default: 90, max: 60, step: 5 } }).volume).toEqual({ default: 60, max: 60, step: 5 });
+		expect(applyConfigPatch(config, { volume: { default: 90, max: 60, step: 5, quietHours: null } }).volume).toEqual({ default: 60, max: 60, step: 5, quietHours: null });
 	});
 
 	it('rejects single-word wake phrases', () => {
@@ -48,5 +51,28 @@ describe('applyConfigPatch', () => {
 	it('does not mutate the original config', () => {
 		applyConfigPatch(config, { wakePhrase: 'okay moon' });
 		expect(config.wakePhrase).toBe('hey buddy');
+	});
+});
+
+describe('voice allowlist', () => {
+	it('keeps only known command types', () => {
+		const voice = applyConfigPatch({ ...config, voice: { restricted: false, allowed: [], hours: null } }, {
+			voice: { restricted: true, allowed: ['stop', 'play-folder', 'launch-rockets' as never], hours: null },
+		}).voice;
+		expect(voice).toEqual({ restricted: true, allowed: ['play-folder', 'stop'], hours: null });
+	});
+});
+
+describe('night volume', () => {
+	it('accepts a valid window and rejects bad times', () => {
+		const quietHours = { start: '20:00', end: '07:00', max: 30 };
+		expect(applyConfigPatch(config, { volume: { ...config.volume, quietHours } }).volume.quietHours).toEqual(quietHours);
+		expect(() => applyConfigPatch(config, { volume: { ...config.volume, quietHours: { ...quietHours, start: '8pm' } } })).toThrow(/20:00/);
+	});
+});
+
+describe('voice lockdown hours', () => {
+	it('rejects badly formatted times', () => {
+		expect(() => applyConfigPatch(config, { voice: { ...config.voice, hours: { start: '7pm', end: '07:00' } } })).toThrow(/19:00/);
 	});
 });

@@ -74,3 +74,18 @@ export function listFolders(): Folder[] {
 export function getTracks(name: string) {
 	return folders.get(name) ?? [];
 }
+
+// "01 Sleepy_Unicorn.mp3" -> "Sleepy Unicorn". Only filenames are cleaned, so tag titles and radio songs like "10cc - ..." keep their numbers.
+export function displayTitle(title: string) {
+	if (!AUDIO_EXTENSIONS.has(path.extname(title).toLowerCase())) {
+		return title;
+	}
+	const name = path.parse(title).name.replace(/_/g, ' ').trim();
+	// The leading number only sets the playing order; keep it if it is the whole name.
+	return name.replace(/^\d+[\s.-]*/, '') || name;
+}
+
+// "01 the sleepy unicorn.mp3" -> "the sleepy unicorn"
+export function trackTitle(file: string) {
+	return toSpokenName(displayTitle(path.basename(file)));
+}

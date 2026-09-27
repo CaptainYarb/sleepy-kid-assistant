@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { inTimeRange, marquee, toLcdText } from './lcd.js';
+import { marquee, toLcdText } from './lcd.js';
+import { inTimeRange } from './time.js';
 
 describe('toLcdText', () => {
 	it('keeps accented letters readable and replaces unsupported characters', () => {
