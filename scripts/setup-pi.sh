@@ -130,6 +130,9 @@ elif ! systemctl is-enabled cloudflared > /dev/null 2>&1; then
 	echo "Tunnel not configured yet. Re-run with CLOUDFLARE_TUNNEL_TOKEN=<token> (see README)."
 fi
 
+# Setup writes hundreds of files; flush them to the SD card so a power cut straight afterwards cannot corrupt them.
+sync
+
 step "Done"
 echo "Portal: http://$(hostname).local:8080"
 echo "The first-boot PIN is printed in: journalctl -u sleepy | grep PIN"

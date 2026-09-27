@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { rename, writeFile } from 'node:fs/promises';
+import { existsSync, mkdirSync, readFileSync, renameSync } from 'node:fs';
+import { open, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { COMMAND_TYPES } from './commands.js';
 import type { Config, Playback, Schedule } from './shared.js';
@@ -44,16 +44,31 @@ function readJson<T>(file: string, fallback: T): T {
 	if (!existsSync(full)) {
 		return fallback;
 	}
-	return JSON.parse(readFileSync(full, 'utf8')) as T;
+	try {
+		return JSON.parse(readFileSync(full, 'utf8')) as T;
+	} catch (err) {
+		// A crash here would restart-loop the service forever, so set the bad file aside for repair and carry on.
+		const aside = `${full}.corrupt-${Date.now()}`;
+		renameSync(full, aside);
+		console.error(`[config] ${file} was unreadable (${(err as Error).message}); moved to ${aside} and using defaults`);
+		return fallback;
+	}
 }
 
 let tmpCounter = 0;
 
-// Write to a temp file and rename so a power cut mid-write never leaves a truncated JSON file.
+// Write to a temp file, flush it to the SD card, then rename, so a power cut mid-write never leaves a truncated JSON file.
 async function writeJson(file: string, data: unknown) {
 	const full = path.join(DATA_DIR, file);
 	const tmp = `${full}.${process.pid}.${tmpCounter++}.tmp`;
-	await writeFile(tmp, `${JSON.stringify(data, null, '\t')}\n`);
+	const handle = await open(tmp, 'w');
+	try {
+		await handle.writeFile(`${JSON.stringify(data, null, '\t')}\n`);
+		// Without this the rename can reach the disk before the data does, leaving an empty file after a power cut.
+		await handle.sync();
+	} finally {
+		await handle.close();
+	}
 	await rename(tmp, full);
 }
 

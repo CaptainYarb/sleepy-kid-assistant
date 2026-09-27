@@ -25,6 +25,7 @@ if [ "$SETUP" = true ]; then
 	ssh -t "$HOST" "cd $APP_DIR && ./scripts/setup-pi.sh"
 else
 	# -t gives sudo a terminal to ask for a password if the passwordless restart rule from setup-pi.sh is missing.
-	ssh -t "$HOST" "cd $APP_DIR && npm ci --omit=dev --no-audit --no-fund --loglevel=error && sudo systemctl restart sleepy"
+	# sync flushes the new files to the SD card, so a power cut right after a deploy cannot leave them half-written.
+	ssh -t "$HOST" "cd $APP_DIR && npm ci --omit=dev --no-audit --no-fund --loglevel=error && sync && sudo systemctl restart sleepy"
 fi
 echo "Deployed to $HOST"

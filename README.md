@@ -156,6 +156,7 @@ You can edit these files by hand. Restart with `sudo systemctl restart sleepy`.
 | Voice never triggers | `arecord -D default -f S16_LE -r 16000 -d 5 test.wav && aplay test.wav`, Voice page status |
 | Wrong USB card picked | Re-run setup with `AUDIO_CARD=<name> MIC_CARD=<name>` (names from `aplay -l` / `arecord -l`) |
 | LCD blank | `i2cdetect -y 1`, contrast potentiometer, address in Settings |
+| Restart loop after a power cut (`ERR_INVALID_PACKAGE_CONFIG` or similar in the log) | A file written just before the power cut was corrupted. Run `rm -rf ~/sleepy/node_modules ~/sleepy/dist` on the Pi, then deploy again. If it keeps happening without a recent deploy, the SD card may be failing |
 | Logs | `journalctl -u sleepy -f` |
 
 ## Roadmap
