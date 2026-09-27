@@ -6,7 +6,7 @@ import { applyBluetooth } from './bluetooth.js';
 import { DATA_DIR, MEDIA_DIR, ROOT_DIR, store } from './config.js';
 import { startLcd, stopLcd } from './lcd.js';
 import { scanLibrary } from './library.js';
-import { startPlayer, stopPlayer } from './player.js';
+import { chime, startPlayer, stopPlayer } from './player.js';
 import { startResume } from './resume.js';
 import { api } from './routes.js';
 import { startScheduler } from './scheduler.js';
@@ -40,6 +40,10 @@ setInterval(async () => {
 
 serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
 	console.log(`[server] http://localhost:${PORT} (data: ${DATA_DIR}, media: ${MEDIA_DIR})`);
+	// An audible "I'm up" after a boot, power cut or deploy; skipped in dev, where tsx restarts on every save.
+	if (process.env.NODE_ENV === 'production') {
+		chime('wake');
+	}
 });
 
 function shutdown() {

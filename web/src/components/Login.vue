@@ -51,7 +51,7 @@ function onKey(event: KeyboardEvent) {
 			<div class="text-5xl">🌙</div>
 			<h1 class="mt-3 text-xl font-bold">Sleepy</h1>
 			<p class="mt-1 text-sm text-slate-400">Enter the parent PIN</p>
-			<div class="mt-6 flex h-10 items-center justify-center text-3xl tracking-[0.4em] text-amber-300">{{ dots || '·' }}</div>
+			<div class="mt-6 flex h-10 items-center justify-center text-3xl tracking-[0.4em] text-amber-300">{{ dots || '' }}</div>
 			<p class="h-5 text-sm text-rose-300" role="alert">{{ error }}</p>
 			<div class="mt-4 grid grid-cols-3 gap-3">
 				<button

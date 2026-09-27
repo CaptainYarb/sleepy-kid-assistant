@@ -440,8 +440,8 @@ export function speak(text: string) {
 }
 
 export function chime(name: 'wake' | 'error' | 'volume') {
-	// The volume tick plays at the new level on purpose; alerts get a floor so they are never inaudible.
-	const volume = name === 'volume' ? state.volume : Math.max(state.volume, 30);
+	// The volume tick plays at the new level on purpose; alerts get a floor so they are never inaudible, but never exceed the night cap.
+	const volume = name === 'volume' ? state.volume : Math.min(Math.max(state.volume, 30), maxAllowed());
 	const child = spawn('mpv', [
 		'--no-video',
 		'--no-terminal',
