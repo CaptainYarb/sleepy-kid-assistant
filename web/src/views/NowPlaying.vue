@@ -38,7 +38,7 @@ onMounted(async () => {
 });
 
 const play = (body: { folder?: string; stationId?: string }) => attempt(() => api('/player/play', { body }));
-const control = (action: 'stop' | 'pause' | 'resume' | 'next') => attempt(() => api(`/player/${action}`, { method: 'POST' }));
+const control = (action: 'stop' | 'pause' | 'resume' | 'next' | 'restart') => attempt(() => api(`/player/${action}`, { method: 'POST' }));
 const setVolume = (value: number) => attempt(() => api('/player/volume', { method: 'PUT', body: { volume: value } }));
 const step = (direction: 1 | -1) => setVolume(volume.value + direction * (config.value?.volume.step ?? 10));
 </script>
@@ -59,6 +59,15 @@ const step = (direction: 1 | -1) => setVolume(volume.value + direction * (config
 			<div class="mt-5 flex items-center justify-center gap-3">
 				<button class="btn-ghost size-14 rounded-full" :disabled="player.status === 'stopped'" aria-label="Stop" @click="control('stop')">
 					<svg viewBox="0 0 24 24" class="size-5 fill-current"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+				</button>
+				<button
+					v-if="player.source?.type !== 'radio'"
+					class="btn-ghost size-14 rounded-full"
+					:disabled="player.status === 'stopped'"
+					aria-label="Restart track"
+					@click="control('restart')"
+				>
+					<svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" /><path d="M4.5 4.5v4.5H9" /></svg>
 				</button>
 				<button
 					class="btn-primary size-18 rounded-full"

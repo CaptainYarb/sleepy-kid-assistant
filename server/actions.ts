@@ -1,4 +1,4 @@
-import { spokenDay, spokenTime, spokenWeather } from './answers.js';
+import { spokenDay, spokenTime, spokenTomorrow, spokenWeather } from './answers.js';
 import type { Command } from './commands.js';
 import { store } from './config.js';
 import * as player from './player.js';
@@ -40,6 +40,8 @@ export async function runCommand(command: Command): Promise<string | void> {
 			return spokenTime(new Date());
 		case 'day':
 			return spokenDay(new Date());
+		case 'tomorrow':
+			return spokenTomorrow(new Date());
 		case 'weather':
 			return spokenWeather();
 	}

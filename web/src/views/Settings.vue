@@ -26,6 +26,7 @@ const commandLabels: Record<CommandType, string> = {
 	'max-volume': 'Volume to max',
 	'time': 'What time is it',
 	'day': 'What day is it',
+	'tomorrow': 'What day is it tomorrow',
 	'weather': 'Weather',
 };
 
@@ -254,6 +255,27 @@ async function logout() {
 			</div>
 			<p class="text-xs text-slate-500">Say "{{ config.wakePhrase }}, what's the weather". Forecasts come from open-meteo.com.</p>
 		</section>
+
+		<form class="card space-y-3" @submit.prevent="save({ resume: config.resume })">
+			<h2 class="label">Resume after a power cut</h2>
+			<label class="flex items-center justify-between gap-3 text-sm">
+				Pick up where it left off
+				<Toggle
+					:model-value="config.resume.enabled"
+					label="Pick up where it left off"
+					@update:model-value="save({ resume: { ...config.resume, enabled: $event } })"
+				/>
+			</label>
+			<label v-if="config.resume.enabled" class="block text-sm">
+				<span class="mb-1 block text-slate-400">Only if power returns within (minutes)</span>
+				<input v-model.number="config.resume.withinMinutes" type="number" min="1" max="1440" class="input">
+			</label>
+			<p class="text-xs text-slate-500">
+				Something started by a schedule always resumes while that schedule is still the latest one, however long the outage.
+				Resuming is skipped if a stop schedule would have run in the meantime.
+			</p>
+			<div v-if="config.resume.enabled" class="flex justify-end"><button class="btn-primary">Save</button></div>
+		</form>
 
 		<section class="card space-y-3">
 			<h2 class="label">Bluetooth</h2>

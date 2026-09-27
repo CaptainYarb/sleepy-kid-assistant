@@ -18,25 +18,48 @@ export function isDue(schedule: Schedule, now: Date, lastFired?: string) {
 		&& lastFired !== fireKey(now);
 }
 
+// When the schedule runs on the day `offset` days from `now`, or null if it does not run that day.
+function occurrence(schedule: Schedule, now: Date, offset: number) {
+	const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+	if (!schedule.enabled || !schedule.days.includes(day.getDay())) {
+		return null;
+	}
+	const [hours, minutes] = schedule.time.split(':').map(Number);
+	day.setHours(hours, minutes, 0, 0);
+	return day.getTime();
+}
+
 export function nextRun(schedules: Schedule[], now: Date): NextRun | null {
-	let best: NextRun | null = null;
 	for (let offset = 0; offset <= 7; offset++) {
+		let best: NextRun | null = null;
 		for (const schedule of schedules) {
-			const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
-			if (!schedule.enabled || !schedule.days.includes(day.getDay())) {
-				continue;
-			}
-			const [hours, minutes] = schedule.time.split(':').map(Number);
-			day.setHours(hours, minutes, 0, 0);
-			if (day > now && (!best || day.getTime() < best.at)) {
-				best = { at: day.getTime(), schedule };
+			const at = occurrence(schedule, now, offset);
+			if (at !== null && at > now.getTime() && (!best || at < best.at)) {
+				best = { at, schedule };
 			}
 		}
 		if (best) {
 			return best;
 		}
 	}
-	return best;
+	return null;
+}
+
+// The most recent schedule event at or before `now`, looking back up to a week.
+export function lastRun(schedules: Schedule[], now: Date): NextRun | null {
+	for (let offset = 0; offset >= -7; offset--) {
+		let best: NextRun | null = null;
+		for (const schedule of schedules) {
+			const at = occurrence(schedule, now, offset);
+			if (at !== null && at <= now.getTime() && (!best || at > best.at)) {
+				best = { at, schedule };
+			}
+		}
+		if (best) {
+			return best;
+		}
+	}
+	return null;
 }
 
 async function runSchedule(schedule: Schedule) {
@@ -44,13 +67,13 @@ async function runSchedule(schedule: Schedule) {
 		return runCommand({ type: 'stop' });
 	}
 	if (schedule.folder) {
-		return runCommand({ type: 'play-folder', folder: schedule.folder });
+		return player.playFolder(schedule.folder, 0, schedule.id);
 	}
 	const station = findStation(schedule.stationId);
 	if (!station) {
 		throw new Error('Station not found');
 	}
-	return player.playStation(station);
+	return player.playStation(station, schedule.id);
 }
 
 async function tick() {

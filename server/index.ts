@@ -7,6 +7,7 @@ import { DATA_DIR, MEDIA_DIR, ROOT_DIR, store } from './config.js';
 import { startLcd, stopLcd } from './lcd.js';
 import { scanLibrary } from './library.js';
 import { startPlayer, stopPlayer } from './player.js';
+import { startResume } from './resume.js';
 import { api } from './routes.js';
 import { startScheduler } from './scheduler.js';
 import { refreshVoice, startVoice, stopVoice } from './voice.js';
@@ -26,6 +27,7 @@ app.get('*', serveStatic({ root: webRoot, path: 'index.html' }));
 
 applyBluetooth(store.config.bluetooth.enabled);
 await scanLibrary();
+startResume();
 startPlayer();
 startVoice();
 startScheduler();

@@ -38,6 +38,7 @@ export interface Config {
 	weather: { place: string; latitude: number | null; longitude: number | null; units: 'fahrenheit' | 'celsius' };
 	// `hours` limits the lockdown to a time window; null means it applies all day.
 	voice: { restricted: boolean; allowed: CommandType[]; hours: TimeRange | null };
+	resume: { enabled: boolean; withinMinutes: number };
 }
 
 export type PublicConfig = Omit<Config, 'pin'>;
@@ -61,6 +62,19 @@ export interface Folder {
 export type PlayerSource =
 	| { type: 'folder'; name: string; label: string }
 	| { type: 'radio'; id: string; label: string };
+
+// What was playing, saved periodically so playback can pick up again after a power cut or crash.
+export interface Playback {
+	source: PlayerSource;
+	// Folder playback only: the playlist in play order (shuffled order included), the current entry and its position.
+	playlist?: string[];
+	index?: number;
+	position?: number;
+	// Set when a schedule started this playback, so it can resume for as long as that schedule is the latest one.
+	scheduleId?: string;
+	paused: boolean;
+	savedAt: number;
+}
 
 export interface PlayerState {
 	available: boolean;

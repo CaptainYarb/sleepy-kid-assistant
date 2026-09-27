@@ -9,13 +9,15 @@ import { ROOT_DIR, store } from './config.js';
 import { events } from './events.js';
 import { displayTitle, folderSettings, getTracks } from './library.js';
 import { logLines, stopProcess } from './proc.js';
-import type { PlayerState, Station } from './shared.js';
+import type { Playback, PlayerState, Station } from './shared.js';
 import { hhmm, inTimeRange } from './time.js';
 
 const SOCKET = path.join(os.tmpdir(), 'sleepy-mpv.sock');
 const PLAYLIST = path.join(os.tmpdir(), 'sleepy-playlist.m3u');
 const DUCK_RATIO = 0.3;
 const VOLUME_CAP_CHECK_MS = 20_000;
+// Resumed stories start a little before where they stopped, so the listener catches the thread again.
+const RESUME_REWIND_S = 5;
 
 const state: PlayerState = {
 	available: false,
@@ -34,6 +36,12 @@ let paused = false;
 let idle = true;
 let ducked = false;
 let restartDelay = 1000;
+// The playlist in play order, kept so a resume can rebuild the same (possibly shuffled) order.
+let currentPlaylist: string[] = [];
+// Set while restoring a session: once the saved entry loads, seek to the saved spot and apply the saved pause state.
+let pendingStart: { index: number; position: number; paused: boolean } | null = null;
+// The schedule that started the current playback; anything started by hand clears it.
+let scheduleId: string | null = null;
 let shuttingDown = false;
 
 function emit() {
@@ -99,6 +107,10 @@ function handleMessage(msg: MpvMessage) {
 		} else {
 			request?.reject(new Error(`mpv: ${msg.error}`));
 		}
+		return;
+	}
+	if (msg.event === 'file-loaded') {
+		applyPendingStart().catch((err: Error) => console.error('[player] resume seek failed:', err.message));
 		return;
 	}
 	if (msg.event !== 'property-change') {
@@ -219,7 +231,7 @@ function shuffled<T>(items: T[]) {
 }
 
 // `startTrack` plays that track first and then carries on through the folder.
-export async function playFolder(name: string, startTrack = 0) {
+export async function playFolder(name: string, startTrack = 0, fromSchedule?: string) {
 	const tracks = getTracks(name);
 	if (!tracks.length) {
 		throw new Error(`No tracks found in "${name}"`);
@@ -232,6 +244,8 @@ export async function playFolder(name: string, startTrack = 0) {
 		list = [first, ...shuffled(tracks.filter((track) => track !== first))];
 		startIndex = 0;
 	}
+	currentPlaylist = list;
+	pendingStart = null;
 	await writeFile(PLAYLIST, `${list.join('\n')}\n`);
 	await command('set_property', 'loop-playlist', settings.loop ? 'inf' : 'no');
 	// Paused while loading so the first track does not blip before jumping to the requested one.
@@ -242,14 +256,73 @@ export async function playFolder(name: string, startTrack = 0) {
 	}
 	await command('set_property', 'pause', false);
 	state.source = { type: 'folder', name, label: name };
+	scheduleId = fromSchedule ?? null;
 	emit();
 }
 
-export async function playStation(station: Station) {
+async function applyPendingStart() {
+	const start = pendingStart;
+	if (!start) {
+		return;
+	}
+	// loadlist briefly loads the first entry before jumping, so wait until the saved entry is the one that loaded.
+	if (Number(await command('get_property', 'playlist-pos')) !== start.index) {
+		return;
+	}
+	pendingStart = null;
+	if (start.position > 0) {
+		await command('seek', start.position, 'absolute');
+	}
+	await command('set_property', 'pause', start.paused);
+}
+
+// A snapshot of what is playing right now, or null when nothing is.
+export async function snapshot(): Promise<Playback | null> {
+	const source = state.source;
+	if (!state.available || state.status === 'stopped' || !source) {
+		return null;
+	}
+	const base = { source, paused: state.status === 'paused', savedAt: Date.now(), ...(scheduleId ? { scheduleId } : {}) };
+	if (source.type === 'radio') {
+		return base;
+	}
+	const [index, position] = await Promise.all([command('get_property', 'playlist-pos'), command('get_property', 'time-pos')]);
+	return { ...base, playlist: currentPlaylist, index: Number(index), position: Math.round(Number(position) || 0) };
+}
+
+// Rebuilds a saved folder session: same play order, same track, a few seconds before where it stopped.
+export async function restoreFolder(playback: Playback) {
+	if (playback.source.type !== 'folder' || !playback.playlist) {
+		return;
+	}
+	const current = playback.playlist[playback.index ?? 0];
+	// Files may have been removed while the Pi was off; the rest of the saved order still applies.
+	const playlist = playback.playlist.filter((file) => existsSync(file));
+	const index = playlist.indexOf(current);
+	if (index === -1) {
+		return playFolder(playback.source.name, 0, playback.scheduleId);
+	}
+	currentPlaylist = playlist;
+	pendingStart = { index, position: Math.max(0, (playback.position ?? 0) - RESUME_REWIND_S), paused: playback.paused };
+	await writeFile(PLAYLIST, `${playlist.join('\n')}\n`);
+	await command('set_property', 'loop-playlist', folderSettings(playback.source.name).loop ? 'inf' : 'no');
+	await command('set_property', 'pause', true);
+	await command('loadlist', PLAYLIST, 'replace');
+	if (index > 0) {
+		await command('playlist-play-index', index);
+	}
+	state.source = playback.source;
+	scheduleId = playback.scheduleId ?? null;
+	emit();
+}
+
+export async function playStation(station: Station, fromSchedule?: string) {
+	pendingStart = null;
 	await command('set_property', 'loop-playlist', 'no');
 	await command('loadfile', station.url, 'replace');
 	await command('set_property', 'pause', false);
 	state.source = { type: 'radio', id: station.id, label: station.name };
+	scheduleId = fromSchedule ?? null;
 	emit();
 }
 
@@ -267,6 +340,12 @@ export async function resume() {
 
 export async function next() {
 	await command('playlist-next', 'weak');
+}
+
+// Back to the start of the current track, and playing even if it was paused.
+export async function restart() {
+	await command('seek', 0, 'absolute');
+	await command('set_property', 'pause', false);
 }
 
 // `feedback` plays a tick at the new level so a parent or child hears the change, but not when settings merely re-clamp it.

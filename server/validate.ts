@@ -128,6 +128,13 @@ export function applyConfigPatch(config: Config, patch: Partial<PublicConfig>): 
 			hours: voice.hours ? { start: voice.hours.start, end: voice.hours.end } : null,
 		};
 	}
+	if (patch.resume) {
+		const resume = { ...config.resume, ...patch.resume };
+		next.resume = {
+			enabled: Boolean(resume.enabled),
+			withinMinutes: int(resume.withinMinutes, 'Resume window', 1, 24 * 60),
+		};
+	}
 	if (patch.weather) {
 		const weather = { ...config.weather, ...patch.weather };
 		const hasLocation = weather.latitude !== null && weather.longitude !== null;

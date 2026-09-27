@@ -150,7 +150,7 @@ export function startLcd() {
 			if (latest.reply) {
 				const title = `${latest.result[0].toUpperCase()}${latest.result.slice(1)}:`;
 				flash = { title, text: latest.reply, until: Date.now() + REPLY_FLASH_MS };
-			} else if (!latest.result.startsWith('ignored')) {
+			} else {
 				flash = { title: 'Heard:', text: latest.result, until: Date.now() + FLASH_MS };
 			}
 		}

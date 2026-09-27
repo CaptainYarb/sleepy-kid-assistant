@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { COMMAND_TYPES } from './commands.js';
-import type { Config, Schedule } from './shared.js';
+import type { Config, Playback, Schedule } from './shared.js';
 
 export const DATA_DIR = path.resolve(process.env.DATA_DIR ?? 'data');
 export const MEDIA_DIR = path.resolve(process.env.MEDIA_DIR ?? 'media');
@@ -14,6 +14,7 @@ export const ROOT_DIR = path.resolve(import.meta.dirname, isBuilt ? '../..' : '.
 export interface State {
 	volume: number | null;
 	lastFired: Record<string, string>;
+	playback?: Playback | null;
 }
 
 const defaultConfig: Config = {
@@ -34,6 +35,8 @@ const defaultConfig: Config = {
 	weather: { place: '', latitude: null, longitude: null, units: 'fahrenheit' },
 	// Unrestricted by default; parents can limit voice to an allowlist of command types in Settings.
 	voice: { restricted: false, allowed: [...COMMAND_TYPES], hours: null },
+	// Long outages do not resume, so bedtime sounds never restart in the morning.
+	resume: { enabled: true, withinMinutes: 30 },
 };
 
 function readJson<T>(file: string, fallback: T): T {
@@ -66,6 +69,7 @@ function loadConfig(): Config {
 		bluetooth: { ...defaultConfig.bluetooth, ...file.bluetooth },
 		weather: { ...defaultConfig.weather, ...file.weather },
 		voice: { ...defaultConfig.voice, ...file.voice },
+		resume: { ...defaultConfig.resume, ...file.resume },
 	};
 }
 

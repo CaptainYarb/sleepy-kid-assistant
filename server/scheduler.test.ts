@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fireKey, isDue, nextRun } from './scheduler.js';
+import { fireKey, isDue, lastRun, nextRun } from './scheduler.js';
 import type { Schedule } from './shared.js';
 
 const bedtime: Schedule = { id: 'a', enabled: true, time: '19:30', days: [0, 1, 2, 3, 4], action: 'play', folder: 'stories' };
@@ -44,5 +44,20 @@ describe('nextRun', () => {
 
 	it('returns null when nothing is enabled', () => {
 		expect(nextRun([{ ...bedtime, enabled: false }], mondayAt('18:00'))).toBeNull();
+	});
+});
+
+describe('lastRun', () => {
+	it('finds the most recent event earlier today', () => {
+		expect(lastRun([bedtime], mondayAt('20:00'))?.at).toBe(new Date('2026-09-28T19:30:00').getTime());
+	});
+
+	it('looks back to previous days, skipping days the schedule is off', () => {
+		// Saturday morning: the last school-night run was Thursday evening.
+		expect(lastRun([bedtime], new Date('2026-10-03T09:00:00'))?.at).toBe(new Date('2026-10-01T19:30:00').getTime());
+	});
+
+	it('counts the current minute as already run', () => {
+		expect(lastRun([bedtime], mondayAt('19:30'))?.schedule.id).toBe('a');
 	});
 });

@@ -84,9 +84,9 @@ api.post('/player/play', async (c) => {
 	return c.json(player.getPlayerState());
 });
 
-const transport = { stop: player.stop, pause: player.pause, resume: player.resume, next: player.next };
+const transport = { stop: player.stop, pause: player.pause, resume: player.resume, next: player.next, restart: player.restart };
 
-api.post('/player/:action{stop|pause|resume|next}', async (c) => {
+api.post('/player/:action{stop|pause|resume|next|restart}', async (c) => {
 	await transport[c.req.param('action') as keyof typeof transport]();
 	return c.json(player.getPlayerState());
 });

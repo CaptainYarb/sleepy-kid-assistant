@@ -83,8 +83,8 @@ export async function handleText(text: string) {
 		addLog(text, 'wake');
 		return;
 	}
+	// Not a listening device: speech without the wake phrase is dropped without a trace, never logged or shown.
 	if (!woke && !status.listening) {
-		addLog(text, 'ignored (no wake phrase)');
 		return;
 	}
 	closeWindow();

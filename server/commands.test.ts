@@ -66,6 +66,8 @@ describe('questions', () => {
 	it('recognizes time, day and weather questions', () => {
 		expect(parseCommand('what time is it', folders)).toEqual({ type: 'time' });
 		expect(parseCommand('what day is it', folders)).toEqual({ type: 'day' });
+		expect(parseCommand('what day is it tomorrow', folders)).toEqual({ type: 'tomorrow' });
+		expect(parseCommand('what day is tomorrow', folders)).toEqual({ type: 'tomorrow' });
 		expect(parseCommand("what's the weather", folders)).toEqual({ type: 'weather' });
 	});
 });

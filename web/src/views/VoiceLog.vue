@@ -19,9 +19,6 @@ function time(at: number) {
 }
 
 function resultClass(result: string) {
-	if (result.startsWith('ignored')) {
-		return 'text-slate-500';
-	}
 	if (result === 'not understood' || result.startsWith('failed') || result.startsWith('blocked')) {
 		return 'text-rose-300';
 	}
@@ -37,7 +34,7 @@ onMounted(async () => {
 	<div class="space-y-4">
 		<div>
 			<h1 class="text-xl font-bold">Voice</h1>
-			<p class="text-sm text-slate-400">What the microphone heard and what it did about it.</p>
+			<p class="text-sm text-slate-400">Wake phrase requests and what it did about them. Speech without the wake phrase is never logged.</p>
 		</div>
 
 		<section class="card space-y-2 text-sm">
@@ -59,7 +56,7 @@ onMounted(async () => {
 				<button class="btn-primary shrink-0">Send</button>
 			</div>
 			<p class="mt-2 text-xs text-slate-500">
-				Runs exactly as if it was heard, so include the wake phrase. Commands: play &lt;folder&gt;, play &lt;story&gt; [in &lt;folder&gt;], play music, stop, pause, resume, next, louder, quieter, volume to max, what time is it, what day is it, what's the weather.
+				Runs exactly as if it was heard, so include the wake phrase. Commands: play &lt;folder&gt;, play &lt;story&gt; [in &lt;folder&gt;], play music, stop, pause, resume, next, louder, quieter, volume to max, what time is it, what day is it, what day is it tomorrow, what's the weather.
 			</p>
 		</form>
 

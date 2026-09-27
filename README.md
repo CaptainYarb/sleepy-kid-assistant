@@ -133,7 +133,7 @@ Everything lives in `DATA_DIR` (`~/sleepy/data` on the Pi):
 
 - `config.json`: PIN, wake phrase, volume limits, folder voice names, radio stations, LCD settings, Bluetooth on/off, weather city and units
 - `schedules.json`: `{ time, days, action: "play" | "stop", folder | stationId }`
-- `state.json`: last volume and when each schedule last fired
+- `state.json`: last volume, when each schedule last fired, and what was playing (so playback resumes after a power cut, crash or deploy; see **Settings → Resume after a power cut**)
 - `secret`: session cookie signing key
 
 You can edit these files by hand. Restart with `sudo systemctl restart sleepy`.
@@ -141,9 +141,10 @@ You can edit these files by hand. Restart with `sudo systemctl restart sleepy`.
 ## Voice tips
 
 - Grammar is closed. Only the words in the wake phrase, the fixed commands, folder spoken names and story titles are recognized, which is what makes it reliable on a Pi 2.
+- Privacy: audio is processed in memory on the Pi and never saved or sent anywhere. The recognizer only knows the command words, and anything said without the wake phrase is discarded without being logged or shown.
 - The Library page warns when a spoken name uses a word the model does not know. Spell numbers out ("book two", not "book 2").
 - Say the wake phrase alone, wait for the chime, then say a command within 6 seconds. You can also say it in one go: "hey buddy, play stories".
-- Commands: `play <folder>`, `play <story> [in <folder>]`, `play music`, `stop`, `pause`, `resume`, `next`, `louder`, `quieter`, `volume to max`, `what time is it`, `what day is it`, `what's the weather`.
+- Commands: `play <folder>`, `play <story> [in <folder>]`, `play music`, `stop`, `pause`, `resume`, `next`, `louder`, `quieter`, `volume to max`, `what time is it`, `what day is it`, `what day is it tomorrow`, `what's the weather`.
 - Stories are found by their filename minus the leading number (`01 the sleepy unicorn.mp3` is "the sleepy unicorn"). Any distinctive word works ("play unicorns in the sleep stories"), and playback continues through the folder afterwards.
 - Answers are spoken with espeak-ng using the MBROLA `us3` voice, which setup-pi.sh builds and installs (plain espeak is used if it is missing). For weather, pick a city in **Settings → Weather** (forecasts come from Open-Meteo, no account needed). The time uses the Pi's timezone, so set it with `sudo raspi-config` → Localisation if it is off.
 

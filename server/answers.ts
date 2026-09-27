@@ -43,10 +43,15 @@ export function ordinal(n: number) {
 	return `${n}${suffix}`;
 }
 
-export function spokenDay(date: Date) {
+export function spokenDay(date: Date, lead = 'Today is') {
 	const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
 	const month = date.toLocaleDateString('en-US', { month: 'long' });
-	return `Today is ${weekday}, ${month} ${ordinal(date.getDate())}`;
+	return `${lead} ${weekday}, ${month} ${ordinal(date.getDate())}`;
+}
+
+export function spokenTomorrow(now: Date) {
+	// Built from calendar parts rather than adding 24 hours, which lands on the wrong day across DST changes.
+	return spokenDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1), 'Tomorrow is');
 }
 
 // Open-Meteo reports WMO weather codes; each word must fit "It's 54 degrees and ___".

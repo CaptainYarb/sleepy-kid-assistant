@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ordinal, spokenDay, spokenTime, weatherWord } from './answers.js';
+import { ordinal, spokenDay, spokenTime, spokenTomorrow, weatherWord } from './answers.js';
 
 const at = (time: string) => new Date(`2026-09-26T${time}:00`);
 
@@ -39,5 +39,17 @@ describe('weatherWord', () => {
 	it('groups showers with rain and thunder as stormy', () => {
 		expect(weatherWord(81, true)).toBe('rainy');
 		expect(weatherWord(95, true)).toBe('stormy');
+	});
+});
+
+describe('spokenTomorrow', () => {
+	it('names the next calendar day, rolling over months', () => {
+		expect(spokenTomorrow(at('21:00'))).toBe('Tomorrow is Sunday, September 27th');
+		expect(spokenTomorrow(new Date('2026-09-30T23:30:00'))).toBe('Tomorrow is Thursday, October 1st');
+	});
+
+	it('stays on the right day across a daylight saving change', () => {
+		// US clocks spring forward on 2026-03-08, a 23-hour day, so adding 24 hours at 23:30 the night before would skip to Monday.
+		expect(spokenTomorrow(new Date('2026-03-07T23:30:00'))).toBe('Tomorrow is Sunday, March 8th');
 	});
 });

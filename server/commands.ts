@@ -14,6 +14,7 @@ export type Command =
 	| { type: 'max-volume' }
 	| { type: 'time' }
 	| { type: 'day' }
+	| { type: 'tomorrow' }
 	| { type: 'weather' };
 
 // Every command type, for validating the voice allowlist; typed as a Record so a new command cannot be forgotten here.
@@ -30,6 +31,7 @@ const COMMAND_TYPE_FLAGS: Record<Command['type'], true> = {
 	'max-volume': true,
 	'time': true,
 	'day': true,
+	'tomorrow': true,
 	'weather': true,
 };
 export const COMMAND_TYPES = Object.keys(COMMAND_TYPE_FLAGS) as Command['type'][];
@@ -62,6 +64,8 @@ const FIXED_PHRASES: Record<string, Command> = {
 	'play the radio': { type: 'play-radio' },
 	'what time is it': { type: 'time' },
 	'what day is it': { type: 'day' },
+	'what day is it tomorrow': { type: 'tomorrow' },
+	'what day is tomorrow': { type: 'tomorrow' },
 	'what is the weather': { type: 'weather' },
 	"what's the weather": { type: 'weather' },
 };
